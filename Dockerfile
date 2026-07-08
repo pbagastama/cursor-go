@@ -2,7 +2,9 @@
 # Node process/container (Railway, Render, Fly.io, VPS). NOT for Netlify/Vercel
 # serverless, which can't host the long-lived process + Cursor CLI this needs.
 
-FROM node:20-slim
+# Node >= 22.13 required: Cursor SDK local agent storage uses the built-in
+# node:sqlite module, which is unavailable on Node 20.
+FROM node:22-slim
 
 # Cursor SDK local runtime shells out to the `cursor-agent` CLI, which needs
 # git + curl available in the image.
