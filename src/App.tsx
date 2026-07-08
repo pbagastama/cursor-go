@@ -41,7 +41,9 @@ export default function App() {
 
   const [contextPaths, setContextPaths] = useState<string[]>([]);
 
-  const connected = settings.provider !== "demo" && !!settings.apiKey;
+  const connected =
+    settings.provider !== "demo" &&
+    (settings.provider === "cursor" || !!settings.apiKey);
   const modelLabel =
     AI_MODELS.find((m) => m.id === settings.model)?.label ?? "Auto";
 

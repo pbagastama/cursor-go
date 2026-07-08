@@ -72,7 +72,11 @@ function buildContextBlock(files?: { path: string; content: string }[]): string 
 export async function streamChat(opts: StreamOptions): Promise<void> {
   const { settings, messages, contextFiles, signal, onToken } = opts;
 
-  if (settings.provider === "demo" || !settings.apiKey) {
+  // Demo when explicitly selected, or when a key-based provider has no key.
+  // The "cursor" provider may run against a backend that holds the key itself
+  // (CURSOR_API_KEY env), so it can proceed without a client-side key.
+  const needsClientKey = settings.provider === "openai" || settings.provider === "custom";
+  if (settings.provider === "demo" || (needsClientKey && !settings.apiKey)) {
     return demoStream(messages, contextFiles, onToken, signal);
   }
 
@@ -87,12 +91,12 @@ export async function streamChat(opts: StreamOptions): Promise<void> {
     }),
   ];
 
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (settings.apiKey) headers.Authorization = `Bearer ${settings.apiKey}`;
+
   const res = await fetch(`${settings.baseUrl.replace(/\/$/, "")}/chat/completions`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${settings.apiKey}`,
-    },
+    headers,
     body: JSON.stringify({
       model: resolveModel(settings.model, settings.provider),
       messages: apiMessages,

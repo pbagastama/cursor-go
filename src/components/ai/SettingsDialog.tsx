@@ -40,10 +40,15 @@ export function SettingsDialog({ open, onOpenChange, settings, onSave }: Props) 
   const useRealApi = draft.provider !== "demo";
 
   const handleSave = () => {
-    onSave({
-      ...draft,
-      provider: draft.apiKey ? (draft.provider === "demo" ? "cursor" : draft.provider) : "demo",
-    });
+    // Cursor can rely on a server-held key, so it stays selected without a
+    // client key. OpenAI/custom need a client key, otherwise fall back to demo.
+    const provider: AiSettings["provider"] =
+      draft.provider === "demo"
+        ? "demo"
+        : draft.provider === "cursor" || draft.apiKey
+        ? draft.provider
+        : "demo";
+    onSave({ ...draft, provider });
     onOpenChange(false);
   };
 
@@ -131,7 +136,14 @@ export function SettingsDialog({ open, onOpenChange, settings, onSave }: Props) 
                       cursor.com/dashboard/integrations
                     </a>
                   </li>
-                  <li>Tempel key di bawah, pilih model, lalu Simpan.</li>
+                  <li>
+                    Tempel key di bawah, pilih model, lalu Simpan.
+                    <span className="opacity-80">
+                      {" "}
+                      (Boleh dikosongkan bila key sudah di-set di server via
+                      <code className="rounded bg-muted px-1 text-primary">CURSOR_API_KEY</code>.)
+                    </span>
+                  </li>
                 </ol>
               </div>
             )}
