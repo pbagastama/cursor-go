@@ -72,6 +72,16 @@ function textOf(message) {
     .join("");
 }
 
+app.get("/", (_req, res) => {
+  res.json({
+    service: "CursorGo backend",
+    status: "ok",
+    provider: "cursor",
+    endpoints: ["/health", "/v1/models", "POST /v1/chat/completions"],
+    note: "Backend berjalan. Ini bukan halaman web — set VITE_CURSOR_PROXY_URL frontend ke URL ini + /v1",
+  });
+});
+
 app.get("/health", (_req, res) => {
   res.json({ ok: true, provider: "cursor", scratch: SCRATCH_DIR });
 });
