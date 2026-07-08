@@ -14,20 +14,30 @@ fs.mkdirSync(SCRATCH_DIR, { recursive: true });
 
 // Restrict CORS to specific origins in production via ALLOWED_ORIGINS
 // (comma-separated). Empty = allow all (fine for local dev).
-const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "")
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
+// Origins are normalized (trailing slash + case) so common typos still match.
+const normalizeOrigin = (u) => (u || "").trim().replace(/\/+$/, "").toLowerCase();
+
+const ALLOWED_ORIGINS = new Set(
+  (process.env.ALLOWED_ORIGINS || "")
+    .split(",")
+    .map(normalizeOrigin)
+    .filter(Boolean)
+);
 
 const app = express();
 app.use(
   cors(
-    ALLOWED_ORIGINS.length
+    ALLOWED_ORIGINS.size
       ? {
           origin: (origin, cb) => {
             // Allow same-origin/no-origin (curl, health checks) and listed origins.
-            if (!origin || ALLOWED_ORIGINS.includes(origin)) cb(null, true);
-            else cb(new Error(`Origin not allowed: ${origin}`));
+            // Disallowed origins get no CORS headers (clean block, not a 500).
+            if (!origin || ALLOWED_ORIGINS.has(normalizeOrigin(origin))) {
+              cb(null, true);
+            } else {
+              console.warn(`[cors] blocked origin: ${origin}`);
+              cb(null, false);
+            }
           },
         }
       : {}
