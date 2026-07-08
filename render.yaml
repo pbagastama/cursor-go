@@ -1,0 +1,21 @@
+# Render.com blueprint for the CursorGo backend (Cursor SDK proxy).
+# Deploy: push to GitHub → Render → New → Blueprint → pick this repo.
+services:
+  - type: web
+    name: cursorgo-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # Your Cursor API key (from cursor.com/dashboard/integrations).
+      # Set it in the Render dashboard, do NOT commit it.
+      - key: CURSOR_API_KEY
+        sync: false
+      # Comma-separated list of allowed frontend origins, e.g.
+      # https://yourapp.netlify.app
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: PORT
+        value: "8787"

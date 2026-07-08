@@ -1,0 +1,24 @@
+# Netlify configuration for the CursorGo frontend (static SPA).
+# NOTE: only the frontend is deployed here. The Cursor backend (server/index.mjs)
+# must run separately (e.g. on your own machine via `npm run server`), because it
+# needs a long-lived Node process + Cursor SDK/CLI that Netlify Functions can't host.
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# SPA fallback: let the client-side app handle all routes.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Basic security headers.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

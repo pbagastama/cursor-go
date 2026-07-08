@@ -1,0 +1,16 @@
+node_modules
+dist
+.git
+.vite
+src
+public
+index.html
+vite.config.ts
+tsconfig*.json
+tailwind.config.js
+postcss.config.js
+netlify.toml
+*.log
+.env
+.env.local
+server/.scratch
