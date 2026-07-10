@@ -1,4 +1,4 @@
-import { FilePlus2, FolderOpen, RefreshCw, X } from "lucide-react";
+import { FilePlus2, FolderOpen, RefreshCw, RotateCcw, X } from "lucide-react";
 import type { FileNode } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -11,12 +11,17 @@ interface Props {
   rootName: string | null;
   tree: FileNode[];
   loading: boolean;
+  indexing?: boolean;
+  indexCount?: number;
+  restoring?: boolean;
+  needsPermission?: boolean;
   supported: boolean;
   activePath: string | null;
   onOpenFolder: () => void;
   onOpenFiles: () => void;
   onCloseFolder: () => void;
   onRefresh: () => void;
+  onResumeFolder?: () => void;
   onToggle: (node: FileNode) => void;
   onOpenFile: (node: FileNode) => void;
 }
@@ -25,12 +30,17 @@ export function FileExplorer({
   rootName,
   tree,
   loading,
+  indexing,
+  indexCount,
+  restoring,
+  needsPermission,
   supported,
   activePath,
   onOpenFolder,
   onOpenFiles,
   onCloseFolder,
   onRefresh,
+  onResumeFolder,
   onToggle,
   onOpenFile,
 }: Props) {
@@ -39,6 +49,19 @@ export function FileExplorer({
       <div className="flex h-9 items-center justify-between px-3">
         <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
           Explorer
+          {restoring ? (
+            <span className="ml-1.5 normal-case tracking-normal text-amber-400">
+              · restore…
+            </span>
+          ) : indexing ? (
+            <span className="ml-1.5 normal-case tracking-normal text-amber-400">
+              · indexing…
+            </span>
+          ) : indexCount != null && indexCount > 0 ? (
+            <span className="ml-1.5 normal-case tracking-normal text-muted-foreground/70">
+              · {indexCount} files
+            </span>
+          ) : null}
         </span>
         <div className="flex items-center gap-0.5">
           <Tooltip content="Buka file">
@@ -51,7 +74,7 @@ export function FileExplorer({
               <FolderOpen className="h-3.5 w-3.5" />
             </Button>
           </Tooltip>
-          {rootName && (
+          {rootName && !needsPermission && (
             <>
               <Tooltip content="Refresh">
                 <Button variant="ghost" size="icon-sm" onClick={onRefresh}>
@@ -77,8 +100,20 @@ export function FileExplorer({
       )}
 
       <div className="relative flex-1 overflow-hidden">
-        {tree.length === 0 ? (
-          <EmptyState supported={supported} onOpenFolder={onOpenFolder} onOpenFiles={onOpenFiles} />
+        {needsPermission && rootName ? (
+          <ResumeState
+            folderName={rootName}
+            onResume={onResumeFolder}
+            onOpenFolder={onOpenFolder}
+            onDismiss={onCloseFolder}
+          />
+        ) : tree.length === 0 ? (
+          <EmptyState
+            supported={supported}
+            restoring={restoring}
+            onOpenFolder={onOpenFolder}
+            onOpenFiles={onOpenFiles}
+          />
         ) : (
           <ScrollArea className="h-full">
             <div className="px-2 pb-6 pt-1">
@@ -100,12 +135,62 @@ export function FileExplorer({
   );
 }
 
+function ResumeState({
+  folderName,
+  onResume,
+  onOpenFolder,
+  onDismiss,
+}: {
+  folderName: string;
+  onResume?: () => void;
+  onOpenFolder: () => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <div className="relative flex h-full flex-col items-center justify-center gap-4 px-5 text-center">
+      <DotPattern className="opacity-40 [mask-image:radial-gradient(180px_circle_at_center,white,transparent)]" />
+      <div className="relative z-10 flex flex-col items-center gap-3">
+        <div className="rounded-2xl border border-primary/40 bg-primary/10 p-3 shadow-sm">
+          <RotateCcw className="h-6 w-6 text-primary" />
+        </div>
+        <div>
+          <p className="text-sm font-medium text-foreground">
+            Lanjutkan folder terakhir?
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Browser meminta izin ulang untuk mengakses{" "}
+            <span className="font-semibold text-foreground/80">{folderName}</span>.
+          </p>
+        </div>
+        <div className="flex w-full flex-col gap-2">
+          <Button size="sm" onClick={onResume} className="w-full">
+            <FolderOpen className="h-4 w-4" />
+            Lanjutkan {folderName}
+          </Button>
+          <Button size="sm" variant="outline" onClick={onOpenFolder} className="w-full">
+            Pilih folder lain
+          </Button>
+          <button
+            type="button"
+            onClick={onDismiss}
+            className="text-[11px] text-muted-foreground hover:text-foreground"
+          >
+            Hapus sesi tersimpan
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function EmptyState({
   supported,
+  restoring,
   onOpenFolder,
   onOpenFiles,
 }: {
   supported: boolean;
+  restoring?: boolean;
   onOpenFolder: () => void;
   onOpenFiles: () => void;
 }) {
@@ -117,11 +202,13 @@ function EmptyState({
           <FolderOpen className="h-6 w-6 text-primary" />
         </div>
         <p className="text-sm text-muted-foreground">
-          Belum ada folder yang dibuka.
+          {restoring
+            ? "Memulihkan sesi terakhir…"
+            : "Belum ada folder yang dibuka."}
         </p>
         {supported ? (
           <div className="flex w-full flex-col gap-2">
-            <Button size="sm" onClick={onOpenFolder} className="w-full">
+            <Button size="sm" onClick={onOpenFolder} className="w-full" disabled={restoring}>
               <FolderOpen className="h-4 w-4" />
               Buka Folder
             </Button>

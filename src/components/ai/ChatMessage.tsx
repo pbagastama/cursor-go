@@ -1,11 +1,22 @@
+import { useMemo } from "react";
 import { motion } from "framer-motion";
-import { FileText, Sparkles, User } from "lucide-react";
+import { FilePenLine, FileText, Sparkles, User } from "lucide-react";
 import type { ChatMessage as ChatMessageType } from "@/lib/types";
+import { parseFileEdits, type FileEdit } from "@/lib/fileEdits";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { cn } from "@/lib/utils";
 
-export function ChatMessage({ message }: { message: ChatMessageType }) {
+interface Props {
+  message: ChatMessageType;
+  onApplyEdit?: (edit: FileEdit) => void;
+}
+
+export function ChatMessage({ message, onApplyEdit }: Props) {
   const isUser = message.role === "user";
+  const edits = useMemo(
+    () => (!isUser && !message.streaming ? parseFileEdits(message.content) : []),
+    [isUser, message.streaming, message.content]
+  );
 
   return (
     <motion.div
@@ -51,6 +62,19 @@ export function ChatMessage({ message }: { message: ChatMessageType }) {
           </div>
         )}
 
+        {message.images && message.images.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-2">
+            {message.images.map((img) => (
+              <img
+                key={img.id}
+                src={img.dataUrl}
+                alt={img.name}
+                className="h-20 max-w-[160px] rounded-lg border border-border object-cover"
+              />
+            ))}
+          </div>
+        )}
+
         <div
           className={cn(
             "text-foreground/90",
@@ -58,7 +82,11 @@ export function ChatMessage({ message }: { message: ChatMessageType }) {
           )}
         >
           {message.content ? (
-            <ChatMarkdown content={message.content} />
+            <ChatMarkdown
+              content={message.content}
+              streaming={message.streaming}
+              onApplyEdit={!isUser ? onApplyEdit : undefined}
+            />
           ) : message.streaming ? (
             <TypingDots />
           ) : null}
@@ -66,6 +94,22 @@ export function ChatMessage({ message }: { message: ChatMessageType }) {
             <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-primary align-middle" />
           )}
         </div>
+
+        {edits.length > 0 && onApplyEdit && (
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => edits.forEach((e) => onApplyEdit(e))}
+              className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-2.5 py-1 text-[12px] font-medium text-primary transition-colors hover:bg-primary/20"
+            >
+              <FilePenLine className="h-3.5 w-3.5" />
+              Apply {edits.length > 1 ? `all (${edits.length})` : "edit"}
+            </button>
+            <span className="text-[11px] text-muted-foreground">
+              {edits.map((e) => e.path.split("/").pop()).join(", ")}
+            </span>
+          </div>
+        )}
       </div>
     </motion.div>
   );

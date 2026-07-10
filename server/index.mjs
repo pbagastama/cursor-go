@@ -51,13 +51,30 @@ function getApiKey(req) {
   return bearer || process.env.CURSOR_API_KEY || "";
 }
 
+/** Extract plain text from OpenAI-style content (string or multimodal parts). */
+function contentToText(content) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return String(content ?? "");
+  const texts = [];
+  let imageCount = 0;
+  for (const part of content) {
+    if (part?.type === "text" && part.text) texts.push(part.text);
+    else if (part?.type === "image_url") imageCount += 1;
+  }
+  if (imageCount > 0) {
+    texts.push(`[${imageCount} image(s) attached — describe/use if relevant]`);
+  }
+  return texts.join("\n");
+}
+
 /** Flatten OpenAI-style messages into a single prompt for the Cursor agent. */
 function buildPrompt(messages = []) {
   const parts = [];
   for (const m of messages) {
-    if (m.role === "system") parts.push(`[System]\n${m.content}`);
-    else if (m.role === "assistant") parts.push(`[Assistant]\n${m.content}`);
-    else parts.push(`[User]\n${m.content}`);
+    const text = contentToText(m.content);
+    if (m.role === "system") parts.push(`[System]\n${text}`);
+    else if (m.role === "assistant") parts.push(`[Assistant]\n${text}`);
+    else parts.push(`[User]\n${text}`);
   }
   parts.push("[Assistant]");
   return parts.join("\n\n");

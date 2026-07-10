@@ -1,21 +1,55 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { FileNode, OpenTab } from "@/lib/types";
 import { readFileContent, writeFileContent } from "@/lib/fileSystem";
+import {
+  applyRangedEdit,
+  resolveEditTarget,
+  type FileEdit,
+} from "@/lib/fileEdits";
+import {
+  clearTabsState,
+  getFileHandleByPath,
+  loadTabsState,
+  saveTabsState,
+  type PersistedTab,
+} from "@/lib/sessionStore";
 import { languageFromFilename, uid } from "@/lib/utils";
 
 export function useEditorTabs() {
   const [tabs, setTabs] = useState<OpenTab[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [sessionReady, setSessionReady] = useState(false);
 
-  // Ref kept in sync with tabs so callbacks always read the latest value.
   const tabsRef = useRef<OpenTab[]>(tabs);
   tabsRef.current = tabs;
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
+
+  // Persist open tabs whenever they change (after initial restore).
+  useEffect(() => {
+    if (!sessionReady) return;
+    const payload = {
+      tabs: tabsRef.current.map(
+        (t): PersistedTab => ({
+          path: t.path,
+          name: t.name,
+          // Persist buffer when dirty or ephemeral so edits survive refresh.
+          content: t.dirty || t.ephemeral ? t.content : undefined,
+          dirty: t.dirty,
+          ephemeral: t.ephemeral,
+          language: t.language,
+        })
+      ),
+      activePath:
+        tabsRef.current.find((t) => t.id === activeIdRef.current)?.path ?? null,
+    };
+    saveTabsState(payload);
+  }, [tabs, activeId, sessionReady]);
 
   const openFile = useCallback(async (node: FileNode) => {
     if (node.kind !== "file") return;
 
-    // Focus if already open.
     const existing = tabsRef.current.find((t) => t.path === node.path);
     if (existing) {
       setActiveId(existing.id);
@@ -135,6 +169,164 @@ export function useEditorTabs() {
     return ok;
   }, []);
 
+  const applyEdit = useCallback(
+    async (edit: FileEdit, opts?: { autoSave?: boolean }) => {
+      let target = resolveEditTarget(edit.path, tabsRef.current);
+      let nextContent = edit.content;
+
+      if (target && edit.startLine != null && edit.endLine != null) {
+        nextContent = applyRangedEdit(
+          target.content,
+          edit.startLine,
+          edit.endLine,
+          edit.content
+        );
+      }
+
+      if (!target) {
+        const name = edit.path.split("/").pop() || edit.path;
+        const tab: OpenTab = {
+          id: uid(),
+          name,
+          path: edit.path,
+          language: edit.language || languageFromFilename(name),
+          content: nextContent,
+          original: "",
+          dirty: true,
+          ephemeral: true,
+        };
+        setTabs((t) => [...t, tab]);
+        setActiveId(tab.id);
+        setNotice(`Dibuat dari AI: ${name}`);
+        setTimeout(() => setNotice(null), 2500);
+        return tab.id;
+      }
+
+      setTabs((t) =>
+        t.map((x) =>
+          x.id === target!.id
+            ? {
+                ...x,
+                content: nextContent,
+                dirty: nextContent !== x.original,
+              }
+            : x
+        )
+      );
+      setActiveId(target.id);
+
+      if (opts?.autoSave && target.handle) {
+        const ok = await writeFileContent(target.handle, nextContent);
+        if (ok) {
+          setTabs((t) =>
+            t.map((x) =>
+              x.id === target!.id
+                ? {
+                    ...x,
+                    content: nextContent,
+                    original: nextContent,
+                    dirty: false,
+                  }
+                : x
+            )
+          );
+          setNotice(`Applied & saved: ${target.name}`);
+        } else {
+          setNotice(`Applied (unsaved): ${target.name}`);
+        }
+      } else {
+        setNotice(`Applied: ${target.name}`);
+      }
+      setTimeout(() => setNotice(null), 2500);
+      return target.id;
+    },
+    []
+  );
+
+  /**
+   * Restore tabs from localStorage using the workspace root handle.
+   * Call once after the folder is mounted / permission granted.
+   */
+  const restoreSession = useCallback(
+    async (root: FileSystemDirectoryHandle | null) => {
+      const saved = loadTabsState();
+      if (!saved || saved.tabs.length === 0) {
+        setSessionReady(true);
+        return;
+      }
+
+      const restored: OpenTab[] = [];
+      for (const p of saved.tabs) {
+        // Prefer disk content; fall back to saved buffer for dirty/ephemeral.
+        let handle: FileSystemFileHandle | undefined;
+        let content = p.content ?? "";
+        let original = content;
+        let dirty = !!p.dirty;
+        let size: number | undefined;
+
+        if (root && !p.ephemeral) {
+          const fh = await getFileHandleByPath(root, p.path);
+          if (fh) {
+            handle = fh;
+            try {
+              const read = await readFileContent(fh);
+              if (!read.tooLarge) {
+                if (p.dirty && p.content != null) {
+                  content = p.content;
+                  original = read.content;
+                  dirty = content !== original;
+                } else {
+                  content = read.content;
+                  original = read.content;
+                  dirty = false;
+                }
+                size = read.size;
+              }
+            } catch {
+              // keep saved content
+            }
+          }
+        }
+
+        // Skip tabs we can't restore at all
+        if (!handle && p.content == null && !p.ephemeral) continue;
+
+        restored.push({
+          id: uid(),
+          name: p.name,
+          path: p.path,
+          language: p.language || languageFromFilename(p.name),
+          content,
+          original,
+          handle,
+          dirty,
+          size,
+          ephemeral: p.ephemeral || !handle,
+        });
+      }
+
+      if (restored.length > 0) {
+        setTabs(restored);
+        const active =
+          restored.find((t) => t.path === saved.activePath) ?? restored[0];
+        setActiveId(active.id);
+      }
+      setSessionReady(true);
+    },
+    []
+  );
+
+  const clearSession = useCallback(() => {
+    clearTabsState();
+    setTabs([]);
+    setActiveId(null);
+  }, []);
+
+  /** Mark session ready without restoring (e.g. no folder). */
+  const markSessionReady = useCallback(() => {
+    setSessionReady(true);
+  }, []);
+
   const activeTab = tabs.find((t) => t.id === activeId) ?? null;
 
   return {
@@ -142,6 +334,7 @@ export function useEditorTabs() {
     activeId,
     activeTab,
     notice,
+    sessionReady,
     setActiveId,
     openFile,
     openFileHandle,
@@ -149,5 +342,9 @@ export function useEditorTabs() {
     updateContent,
     closeTab,
     saveTab,
+    applyEdit,
+    restoreSession,
+    clearSession,
+    markSessionReady,
   };
 }

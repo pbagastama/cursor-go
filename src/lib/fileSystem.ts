@@ -11,11 +11,16 @@ const IGNORED = new Set([
   "node_modules",
   ".next",
   "dist",
-  "build",
+  "build", // Gradle / JS build output
   ".cache",
   ".turbo",
   ".DS_Store",
   ".vite",
+  "target", // Maven / Rust cargo build output
+  "vendor", // Go modules vendor/
+  ".gradle", // Gradle cache
+  ".idea", // IntelliJ
+  "out", // IntelliJ / some Java out dirs
 ]);
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2 MB safety cap for reading into the editor
@@ -116,4 +121,92 @@ export async function writeFileContent(
     console.error("write failed", e);
     return false;
   }
+}
+
+/** Flat index entry for @ mention across the whole workspace. */
+export interface FileIndexEntry {
+  name: string;
+  path: string;
+  kind: "file" | "directory";
+  handle: FileSystemFileHandle | FileSystemDirectoryHandle;
+}
+
+export interface WalkOptions {
+  /** Max folder depth from root (default 8). */
+  maxDepth?: number;
+  /** Max file entries to collect (default 4000). */
+  maxFiles?: number;
+  /** Include directory nodes in the result (default true). */
+  includeDirs?: boolean;
+}
+
+/**
+ * Recursively walk a directory for @ mention indexing.
+ * Skips IGNORED folders (node_modules, .git, …).
+ */
+export async function walkDirectoryRecursive(
+  dirHandle: FileSystemDirectoryHandle,
+  parentPath = "",
+  options: WalkOptions = {}
+): Promise<FileIndexEntry[]> {
+  const maxDepth = options.maxDepth ?? 8;
+  const maxFiles = options.maxFiles ?? 4000;
+  const includeDirs = options.includeDirs !== false;
+  const out: FileIndexEntry[] = [];
+
+  async function walk(
+    handle: FileSystemDirectoryHandle,
+    path: string,
+    depth: number
+  ): Promise<void> {
+    if (depth > maxDepth) return;
+    if (out.filter((e) => e.kind === "file").length >= maxFiles) return;
+
+    let entries: AsyncIterable<
+      [string, FileSystemFileHandle | FileSystemDirectoryHandle]
+    >;
+    try {
+      entries = (handle as any).entries();
+    } catch {
+      return;
+    }
+
+    for await (const [name, child] of entries) {
+      if (IGNORED.has(name)) continue;
+      if (name.startsWith(".") && name !== ".env" && name !== ".env.local") {
+        // Skip most dotfiles/dirs but keep common env files
+        if (child.kind === "directory") continue;
+        if (!name.startsWith(".env")) continue;
+      }
+
+      const childPath = path ? `${path}/${name}` : name;
+
+      if (child.kind === "directory") {
+        if (includeDirs) {
+          out.push({
+            name,
+            path: childPath,
+            kind: "directory",
+            handle: child,
+          });
+        }
+        await walk(child as FileSystemDirectoryHandle, childPath, depth + 1);
+      } else {
+        if (out.filter((e) => e.kind === "file").length >= maxFiles) return;
+        out.push({
+          name,
+          path: childPath,
+          kind: "file",
+          handle: child,
+        });
+      }
+    }
+  }
+
+  await walk(dirHandle, parentPath, 0);
+  out.sort((a, b) => {
+    if (a.kind !== b.kind) return a.kind === "directory" ? -1 : 1;
+    return a.path.localeCompare(b.path);
+  });
+  return out;
 }

@@ -1,9 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Plus, Settings2, Sparkles, Trash2 } from "lucide-react";
-import type { ChatMessage as ChatMessageType } from "@/lib/types";
+import type { ChatMessage as ChatMessageType, OpenTab } from "@/lib/types";
+import type { FileEdit } from "@/lib/fileEdits";
+import type { FileIndexEntry } from "@/lib/fileSystem";
+import type { MentionCandidate } from "@/lib/mention";
 import { ChatMessage } from "./ChatMessage";
-import { ChatInput, type ContextChip } from "./ChatInput";
+import {
+  ChatInput,
+  chipsToImages,
+  type ContextChip,
+} from "./ChatInput";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -17,20 +24,31 @@ interface Props {
   connected: boolean;
   contextChips: ContextChip[];
   canAttach: boolean;
-  onSend: (content: string) => void;
+  tabs: OpenTab[];
+  fileIndex: FileIndexEntry[];
+  indexing?: boolean;
+  activePath?: string | null;
+  onSend: (payload: {
+    content: string;
+    chips: ContextChip[];
+    images: ReturnType<typeof chipsToImages>;
+  }) => void;
   onStop: () => void;
   onClear: () => void;
   onModelChange: (m: string) => void;
+  onAddChip: (chip: ContextChip) => void;
   onRemoveChip: (id: string) => void;
   onAttachActive: () => void;
   onOpenSettings: () => void;
+  onResolveMention: (item: MentionCandidate) => Promise<ContextChip[]>;
+  onApplyEdit: (edit: FileEdit) => void;
 }
 
 const SUGGESTIONS = [
   "Jelaskan file yang sedang aktif",
   "Refactor fungsi ini agar lebih bersih",
   "Buatkan unit test",
-  "Cari potensi bug di kode ini",
+  "Edit file: perbaiki bug yang ada",
 ];
 
 export function AiPanel({
@@ -40,13 +58,20 @@ export function AiPanel({
   connected,
   contextChips,
   canAttach,
+  tabs,
+  fileIndex,
+  indexing,
+  activePath,
   onSend,
   onStop,
   onClear,
   onModelChange,
+  onAddChip,
   onRemoveChip,
   onAttachActive,
   onOpenSettings,
+  onResolveMention,
+  onApplyEdit,
 }: Props) {
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -59,13 +84,14 @@ export function AiPanel({
   }, [messages]);
 
   const handleSend = () => {
-    if (!input.trim()) return;
-    onSend(input);
+    const images = chipsToImages(contextChips);
+    if (!input.trim() && images.length === 0 && contextChips.length === 0) return;
+    onSend({ content: input, chips: contextChips, images });
     setInput("");
   };
 
   const handleSuggestion = (s: string) => {
-    onSend(s);
+    onSend({ content: s, chips: contextChips, images: chipsToImages(contextChips) });
   };
 
   return (
@@ -117,7 +143,11 @@ export function AiPanel({
           <ScrollArea className="h-full">
             <div className="divide-y divide-border/50 pb-4">
               {messages.map((m) => (
-                <ChatMessage key={m.id} message={m} />
+                <ChatMessage
+                  key={m.id}
+                  message={m}
+                  onApplyEdit={onApplyEdit}
+                />
               ))}
             </div>
           </ScrollArea>
@@ -133,9 +163,15 @@ export function AiPanel({
         model={model}
         onModelChange={onModelChange}
         contextChips={contextChips}
+        onAddChip={onAddChip}
         onRemoveChip={onRemoveChip}
         onAttachActive={onAttachActive}
         canAttach={canAttach}
+        tabs={tabs}
+        fileIndex={fileIndex}
+        indexing={indexing}
+        activePath={activePath}
+        onResolveMention={onResolveMention}
       />
     </div>
   );
@@ -154,8 +190,9 @@ function EmptyChat({ onSuggestion }: { onSuggestion: (s: string) => void }) {
         <BorderBeam size={60} duration={6} />
       </motion.div>
       <h3 className="text-base font-semibold">Tanya apa saja</h3>
-      <p className="mb-5 mt-1 max-w-[240px] text-xs text-muted-foreground">
-        Agent bisa membaca file aktif, menulis, dan menjelaskan kode kamu.
+      <p className="mb-5 mt-1 max-w-[260px] text-xs text-muted-foreground">
+        Ketik <kbd className="rounded bg-muted px-1">@</kbd> untuk mention file,
+        paste kode/gambar, atau minta edit lalu klik <strong>Apply</strong>.
       </p>
 
       <div className="flex w-full max-w-xs flex-col gap-2">

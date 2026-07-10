@@ -26,6 +26,14 @@ export interface OpenTab {
 
 export type ChatRole = "user" | "assistant" | "system";
 
+export interface ChatImage {
+  id: string;
+  name: string;
+  /** data URL (image/png;base64,...) */
+  dataUrl: string;
+  mime: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: ChatRole;
@@ -34,6 +42,8 @@ export interface ChatMessage {
   model?: string;
   /** File paths attached as context. */
   context?: string[];
+  /** Images attached to this message. */
+  images?: ChatImage[];
   streaming?: boolean;
   error?: boolean;
 }
