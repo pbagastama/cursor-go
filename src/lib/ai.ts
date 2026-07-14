@@ -36,6 +36,16 @@ export const CURSOR_PROXY_URL =
   (import.meta.env.VITE_CURSOR_PROXY_URL as string | undefined) ||
   "http://localhost:8787/v1";
 
+/**
+ * Backend origin (without /v1) — used for zip upload/download.
+ * Derived from VITE_CURSOR_PROXY_URL or VITE_API_BASE_URL.
+ */
+export const API_BASE_URL = (() => {
+  const explicit = import.meta.env.VITE_API_BASE_URL as string | undefined;
+  if (explicit) return explicit.replace(/\/$/, "");
+  return CURSOR_PROXY_URL.replace(/\/v1\/?$/, "").replace(/\/$/, "");
+})();
+
 export const DEFAULT_SETTINGS: AiSettings = {
   provider: "demo",
   baseUrl: CURSOR_PROXY_URL,

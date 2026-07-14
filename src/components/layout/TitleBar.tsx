@@ -1,4 +1,5 @@
-import { PanelLeft, PanelRight, Sparkles } from "lucide-react";
+import { Link } from "react-router-dom";
+import { FileArchive, PanelLeft, PanelRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { GradientText } from "@/components/magicui/gradient-text";
@@ -37,6 +38,14 @@ export function TitleBar({
       </div>
 
       <div className="flex items-center gap-1">
+        <Tooltip content="Upload & share ZIP" side="bottom">
+          <Button variant="ghost" size="sm" className="gap-1.5" asChild>
+            <Link to="/upload-zip">
+              <FileArchive className="h-4 w-4" />
+              <span className="hidden sm:inline">Share ZIP</span>
+            </Link>
+          </Button>
+        </Tooltip>
         <Tooltip content="Toggle AI Agent" side="bottom">
           <Button
             variant={aiOpen ? "secondary" : "ghost"}

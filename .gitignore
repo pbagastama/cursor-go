@@ -8,3 +8,4 @@ dist-ssr
 .env
 .env.local
 server/.scratch
+server/uploads

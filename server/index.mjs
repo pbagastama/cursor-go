@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Agent, Cursor, CursorAgentError } from "@cursor/sdk";
+import { createZipRouter } from "./zips.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 8787;
@@ -11,6 +12,10 @@ const PORT = process.env.PORT || 8787;
 // Empty scratch workspace so the Cursor agent has a safe cwd for local runs.
 const SCRATCH_DIR = path.join(__dirname, ".scratch");
 fs.mkdirSync(SCRATCH_DIR, { recursive: true });
+
+// Persistent-ish uploads dir (on Render free disk is ephemeral across redeploys).
+const UPLOADS_DIR = path.join(__dirname, "uploads");
+fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
 // Restrict CORS to specific origins in production via ALLOWED_ORIGINS
 // (comma-separated). Empty = allow all (fine for local dev).
@@ -44,6 +49,9 @@ app.use(
   )
 );
 app.use(express.json({ limit: "10mb" }));
+
+// Public zip share (upload + download, no login)
+app.use(createZipRouter(UPLOADS_DIR));
 
 function getApiKey(req) {
   const auth = req.headers.authorization || "";
@@ -104,13 +112,25 @@ app.get("/", (_req, res) => {
     service: "CursorGo backend",
     status: "ok",
     provider: "cursor",
-    endpoints: ["/health", "/v1/models", "POST /v1/chat/completions"],
-    note: "Backend berjalan. Ini bukan halaman web — set VITE_CURSOR_PROXY_URL frontend ke URL ini + /v1",
+    endpoints: [
+      "/health",
+      "/v1/models",
+      "POST /v1/chat/completions",
+      "POST /upload-zip",
+      "GET /zips/:id",
+      "GET /zips/:id/download",
+    ],
+    note: "Backend berjalan. Set VITE_CURSOR_PROXY_URL frontend ke URL ini + /v1. Upload ZIP: POST /upload-zip",
   });
 });
 
 app.get("/health", (_req, res) => {
-  res.json({ ok: true, provider: "cursor", scratch: SCRATCH_DIR });
+  res.json({
+    ok: true,
+    provider: "cursor",
+    scratch: SCRATCH_DIR,
+    uploads: UPLOADS_DIR,
+  });
 });
 
 // List models available to the caller's Cursor account.
@@ -218,5 +238,7 @@ app.post("/v1/chat/completions", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`\n  🚀 CursorGo backend (Cursor SDK) listening on http://localhost:${PORT}`);
   console.log(`     Health:  http://localhost:${PORT}/health`);
-  console.log(`     Chat:    POST http://localhost:${PORT}/v1/chat/completions\n`);
+  console.log(`     Chat:    POST http://localhost:${PORT}/v1/chat/completions`);
+  console.log(`     Upload:  POST http://localhost:${PORT}/upload-zip`);
+  console.log(`     Download: GET  http://localhost:${PORT}/zips/:id/download\n`);
 });

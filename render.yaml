@@ -17,5 +17,8 @@ services:
       # https://yourapp.netlify.app
       - key: ALLOWED_ORIGINS
         sync: false
+      # Frontend URL for public zip share links (/zip/:id)
+      - key: PUBLIC_FRONTEND_URL
+        sync: false
       - key: PORT
         value: "8787"

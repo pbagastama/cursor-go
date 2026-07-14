@@ -21,6 +21,8 @@ kemampuan membuka file langsung dari file manager / Finder.
 - UI modern: **Tailwind**, **Radix UI**, **Framer Motion**, komponen bergaya **Magic UI**
   (BorderBeam, ShimmerButton, AnimatedShinyText, DotPattern), ikon **lucide-react**.
 - Layout **resizable** (sidebar & panel AI), light/dark theme, keyboard shortcuts.
+- **Share ZIP** (`/upload-zip`) — upload proyek Go sebagai ZIP, dapat link publik
+  (`/zip/:id`) yang bisa diunduh orang lain **tanpa login**.
 
 ## Tech Stack
 
@@ -129,6 +131,7 @@ Netlify Functions, jadi backend dijalankan terpisah (mis. di laptopmu).
 3. Isi env di dashboard Render:
    - `CURSOR_API_KEY` = key dari cursor.com/dashboard/integrations
    - `ALLOWED_ORIGINS` = `https://namamu.netlify.app` (URL frontend kamu)
+   - `PUBLIC_FRONTEND_URL` = `https://namamu.netlify.app` (untuk link share ZIP `/zip/:id`)
 4. Deploy → dapat URL `https://cursorgo-backend.onrender.com`.
 
 ### Opsi B — Railway
@@ -166,6 +169,8 @@ di dialog **Settings** aplikasi.
   sesuaikan `ENV PATH` di `Dockerfile`.
 - Backend memakai runtime **local** dengan cwd `server/.scratch` (folder kosong) — agent
   tidak menyentuh repo; konteks file dikirim inline dari panel chat.
+- Upload ZIP disimpan di `server/uploads/` (di Render free tier disk **ephemeral** —
+  file bisa hilang saat redeploy). Download publik: `GET /zips/:id/download` (tanpa auth).
 
 ## Shortcut
 
